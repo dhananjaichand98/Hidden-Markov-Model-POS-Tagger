@@ -1,12 +1,11 @@
 <a name="readme-top"></a>
-# Hidden Markov Model - Part of Speech Tagging
+# Hidden Markov Model - Part of Speech Tagger
 
 ## Description
 
-A part of speech tagging tool developed using hidden markov model. It uses tagged training data to learn weights for the tranisiton and emission matrices of a hidden markov model. 
-The model can then be run on untagged input text and will output a file tagging the part-of-speech for 
+A part-of-speech tagging tool developed written in Python that uses Hidden Markov Model. It uses tagged training data to learn probability scores for the transition and emission matrices of the Hidden Markov Model. The model can then be run on an untagged input text and will output a file tagging the part-of-speech for 
 each word in the input file. It also offers functionality to compare accuracy against ground truth tagged results. 
-The model achieves a performace of 87.98% for Italian ISDT and 85.92% for Japanese GSD Datasets. 
+The model achieves an accuracy of 87.98% for Italian ISDT and 85.92% for Japanese GSD Datasets which lie in the data folder. 
 
 ## Getting Started
 
