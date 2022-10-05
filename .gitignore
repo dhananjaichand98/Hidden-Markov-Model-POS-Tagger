@@ -1,0 +1,5 @@
+# ignore model file that contains weights
+hmmmodel.txt
+
+# ignore the output file
+hmmoutput.txt
