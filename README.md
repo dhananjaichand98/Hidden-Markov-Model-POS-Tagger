@@ -40,12 +40,25 @@ There are two programs: hmmlearn.py will learn a hidden Markov model from the tr
     python hmmdecode.py /path/to/input
     ```
 
+Alternatively, 
+* execute bash script to run both the files and get tagging result.
+    ```
+    bash bash.sh /path/to/training_input /path/to/raw_input
+    ```
+
+## Data
+
+The data folder contains *_train_tagged.txt, *_dev_tagged.txt and *_dev_raw.txt files in the following format:
+
+* *_train_tagged.txt: A file with tagged training data in the word/TAG format, with words separated by spaces and each sentence on a new line.
+* *_dev_raw.txt: A file with untagged development data, with words separated by spaces and each sentence on a new line.
+* *_dev_tagged.txt: A file with tagged development data in the word/TAG format, with words separated by spaces and each sentence on a new line, to serve as an answer key.
 
 ## Authors
 
 - Dhananjai Chand
 
-## Acknowledgments
+## Acknowledgment
 
 * [Jurafsky and Martin, chapter 8](https://web.stanford.edu/~jurafsky/slp3/8.pdf)
 * [Jurafsky and Martin, appendix A](https://web.stanford.edu/~jurafsky/slp3/A.pdf)
