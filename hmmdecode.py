@@ -15,7 +15,7 @@ class HmmModel:
             emission_log_probs: emission log probabilities map for pairs of state and observations
             open_class_states: states belonging to open class
             suffix_emission_log_probs: emission log probabilities map for pairs of state and suffixes
-            suffixes: set of suffixes seen on training data
+            suffixes: map of suffixes with frequency of occurance, seen on training data
     """
 
     def __init__(self) -> None:
@@ -31,7 +31,7 @@ class HmmModel:
         self.open_class_states = set()
         self.suffix_emission_log_probs = {}
         self.final_probs = {}
-        self.suffixes = set()
+        self.suffixes = {}
 
     def load_weights(self, weights_file) -> None:
         """
@@ -51,7 +51,7 @@ class HmmModel:
             self.training_states = set(self.initial_probs.keys())
             self.open_class_states = set(json_dict["open_class_states"])
             self.final_probs = json_dict["final_probs"]
-            self.suffixes = set(json_dict["suffixes"])
+            self.suffixes = json_dict["suffixes"]
 
     def parse_input(self, lines) -> list:
         """
@@ -89,6 +89,7 @@ class HmmModel:
         """
             decode a list of observations and tag them using viterbi decoding algorithm
         """
+
         viterbi = {}
         tagged_line = []
 
@@ -97,18 +98,22 @@ class HmmModel:
 
         back_pointer = {}
 
-        # calculating viterbi path log probability and back pointer for initial set of states (time t = 0)
-        initial_suffix = obsv_sequence[0][-2:]
-        initial_suffix_2 = obsv_sequence[0][-3:]
+        initial_suffix_bi, initial_suffix_tri = obsv_sequence[0][-2:], obsv_sequence[0][-3:]        
+        initial_suffix_first, initial_suffix_second = initial_suffix_bi, initial_suffix_tri
+
+        if (initial_suffix_bi in self.suffixes and initial_suffix_tri in self.suffixes and self.suffixes[initial_suffix_tri] > self.suffixes[initial_suffix_bi]):
+            initial_suffix_first, initial_suffix_second = initial_suffix_tri, initial_suffix_bi
+
+        # calculating viterbi path log probability and back pointer for initial set of states (time t = 0)        
         for state in self.training_states:
             if (not ((state, obsv_sequence[0]) in self.emission_log_probs)):
                 if obsv_sequence[0] in self.training_obsvs or self.initial_probs[state] == float("-inf") or not(state in self.open_class_states):
                     viterbi[(state, 0)] = float("-inf")
                 else:
-                    if initial_suffix in self.suffixes:
-                        viterbi[(state, 0)] = self.initial_probs[state] + self.suffix_emission_log_probs[(state, initial_suffix)]
-                    elif initial_suffix_2 in self.suffixes:
-                        viterbi[(state, 0)] = self.initial_probs[state] + self.suffix_emission_log_probs[(state, initial_suffix_2)]
+                    if initial_suffix_first in self.suffixes:
+                        viterbi[(state, 0)] = self.initial_probs[state] + self.suffix_emission_log_probs[(state, initial_suffix_first)]
+                    elif initial_suffix_second in self.suffixes:
+                        viterbi[(state, 0)] = self.initial_probs[state] + self.suffix_emission_log_probs[(state, initial_suffix_second)]
                     else:
                         viterbi[(state, 0)] = self.initial_probs[state]
             else:
@@ -121,8 +126,13 @@ class HmmModel:
         # calculating viterbi path log probability and back pointer for remaining states (time t = 1 to n-1)
         for t in range(1, len(obsv_sequence)):
 
-            suffix = obsv_sequence[t][-2:]
-            suffix_2 = obsv_sequence[t][-3:]
+            suffix_bi = obsv_sequence[t][-2:]
+            suffix_tri = obsv_sequence[t][-3:]
+
+            suffix_first, suffix_second = suffix_bi, suffix_tri
+            if(suffix_bi in self.suffixes and suffix_tri in self.suffixes and self.suffixes[suffix_bi] < self.suffixes[suffix_tri]):
+                suffix_first, suffix_second = suffix_tri, suffix_bi 
+
             for state in self.training_states:
 
                 curr = float("-inf")
@@ -134,10 +144,10 @@ class HmmModel:
                         if obsv_sequence[t] in self.training_obsvs or viterbi[(prev_state, t-1)] == float("-inf") or self.transition_log_probs[(prev_state, state)] == float("-inf")  or not(state in self.open_class_states):
                             alpha = float("-inf")
                         else:
-                            if suffix in self.suffixes:
-                                alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)] + self.suffix_emission_log_probs[(state, suffix)]
-                            elif suffix_2 in self.suffixes:
-                                alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)] + self.suffix_emission_log_probs[(state, suffix_2)]
+                            if suffix_first in self.suffixes:
+                                alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)] + self.suffix_emission_log_probs[(state, suffix_first)]
+                            elif suffix_second in self.suffixes:
+                                alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)] + self.suffix_emission_log_probs[(state, suffix_second)]
                             else:
                                 alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)]
                     else:

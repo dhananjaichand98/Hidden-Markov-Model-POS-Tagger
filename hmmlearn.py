@@ -19,7 +19,7 @@ class HmmTrainer:
             open_class_states: states belonging to open class
             uniques_obsvs_per_state: map of states to frequency of unique observations
             suffix_emission_log_probs: emission log probabilities map for pairs of state and suffixes
-            suffixes: set of suffixes seen on training data
+            suffixes: map of suffixes with frequency of occurance, seen on training data
             suffixes_count: count of occurance of suffixes
     """
 
@@ -107,21 +107,21 @@ class HmmTrainer:
                     else:
                         self.uniques_obsvs_per_state[state] = 1
 
-                suffix = obsv[-2:]
-                if len(suffix) == 2 and len(obsv) > 2:
-                    if (state, suffix) in self.suffix_emission_log_probs:
-                        self.suffix_emission_log_probs[(state, suffix)] += 1
+                suffix_bi = obsv[-2:]
+                if len(suffix_bi) == 2 and len(obsv) > 2:
+                    if (state, suffix_bi) in self.suffix_emission_log_probs:
+                        self.suffix_emission_log_probs[(state, suffix_bi)] += 1
                     else:
-                        self.suffix_emission_log_probs[(state, suffix)] = 1
-                    self.suffixes_count[suffix] += 1
+                        self.suffix_emission_log_probs[(state, suffix_bi)] = 1
+                    self.suffixes_count[suffix_bi] += 1
 
-                suffix = obsv[-3:]
-                if len(suffix) == 3 and len(obsv) > 3:
-                    if (state, suffix) in self.suffix_emission_log_probs:
-                        self.suffix_emission_log_probs[(state, suffix)] += 1
+                suffix_tri = obsv[-3:]
+                if len(suffix_tri) == 3 and len(obsv) > 3:
+                    if (state, suffix_tri) in self.suffix_emission_log_probs:
+                        self.suffix_emission_log_probs[(state, suffix_tri)] += 1
                     else:
-                        self.suffix_emission_log_probs[(state, suffix)] = 1
-                    self.suffixes_count[suffix] += 1
+                        self.suffix_emission_log_probs[(state, suffix_tri)] = 1
+                    self.suffixes_count[suffix_tri] += 1
 
                 if i > 0:
                     prev_state = tokens[i-1][0]
@@ -223,7 +223,7 @@ class HmmTrainer:
 
         # storing the top suffixes        
         sorted_suffixes = sorted(self.suffixes_count.items(), key=lambda item: item[1], reverse=True)
-        self.suffixes = [x[0] for x in sorted_suffixes[:100]]
+        self.suffixes = {x[0]:x[1] for x in sorted_suffixes[:100]}
 
         # setting open class states
         sorted_uniq_obsvs_states = sorted(self.uniques_obsvs_per_state.items(), key=lambda item: item[1], reverse=True)
@@ -247,7 +247,7 @@ class HmmTrainer:
             (' '.join(k), v) for k, v in self.suffix_emission_log_probs.items()) 
         json_dict["state_freq"] = self.state_freq
         json_dict["open_class_states"] = list(self.open_class_states)
-        json_dict["suffixes"] = list(self.suffixes)
+        json_dict["suffixes"] = self.suffixes
         with open(file, 'w', encoding='utf-8') as fp:
             json.dump(json_dict, fp, indent=2, ensure_ascii=False)
 
