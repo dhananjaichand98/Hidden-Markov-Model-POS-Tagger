@@ -1,12 +1,12 @@
-# Script to run hmmlearn and hmmcode
+# Script to run hmmlearn and hmmdecode
 
 if [ "$1" ]; then
   echo "Training on tagged file: $1.....";
-  python3 hmmlearn2.py $1;
+  python3 hmmlearn.py $1;
   echo -e "DONE\n"
 else
   echo "Training on default tagged file.....";
-  python3 hmmlearn2.py;
+  python3 hmmlearn.py;
   echo -e "DONE\n"
 fi
 

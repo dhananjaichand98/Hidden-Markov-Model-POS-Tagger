@@ -1,18 +1,21 @@
 import json
 import sys
 
-
 class HmmModel:
     """
         This class loads input weights and runs hmm model on raw text files
 
         Attributes:
             initial_probs: initial probabilities for states
+            final_probs: log of probability of a state to be final state for a sequence of observations
             training_states: set of training states
             training_obsvs: set of training observations
             state_freq: frequencey of occurance of each state
-            transition_probs: transition probabilities map for pairs of previous state and current state
-            emission_probs: emission probabilities map for pairs of state and observations
+            transition_log_probs: transition log probabilities map for pairs of previous state and current state
+            emission_log_probs: emission log probabilities map for pairs of state and observations
+            open_class_states: states belonging to open class
+            suffix_emission_log_probs: emission log probabilities map for pairs of state and suffixes
+            suffixes: set of suffixes seen on training data
     """
 
     def __init__(self) -> None:
@@ -22,24 +25,33 @@ class HmmModel:
         self.initial_probs = {}
         self.training_states = {}
         self.training_obsvs = {}
-        self.emission_probs = {}
+        self.emission_log_probs = {}
         self.state_freq = {}
-        self.transition_probs = {}
+        self.transition_log_probs = {}
+        self.open_class_states = set()
+        self.suffix_emission_log_probs = {}
+        self.final_probs = {}
+        self.suffixes = set()
 
     def load_weights(self, weights_file) -> None:
         """
             load trained weights into class variables
         """
-        with open(weights_file, 'r', encoding='utf8', errors='ignore') as f:
+        with open(weights_file, 'r', encoding='utf-8', errors='ignore') as f:
             json_dict = json.loads(f.read())
             self.initial_probs = json_dict["initial_probs"]
             self.state_freq = json_dict["state_freq"]
-            self.transition_probs = dict(
-                (tuple(k.split()), v) for k, v in json_dict["transition_probs"].items())
-            self.emission_probs = dict((tuple(k.split()), v)
-                                       for k, v in json_dict["emission_probs"].items())
-            self.training_obsvs = set(self.emission_probs.values())
+            self.transition_log_probs = dict(
+                (tuple(k.split()), v) for k, v in json_dict["transition_log_probs"].items())
+            self.emission_log_probs = dict((tuple(k.split()), v)
+                                       for k, v in json_dict["emission_log_probs"].items())
+            self.suffix_emission_log_probs = dict((tuple(k.split()), v)
+                                       for k, v in json_dict["suffix_emission_log_probs"].items())
+            self.training_obsvs = set(k[1] for k in self.emission_log_probs.keys())
             self.training_states = set(self.initial_probs.keys())
+            self.open_class_states = set(json_dict["open_class_states"])
+            self.final_probs = json_dict["final_probs"]
+            self.suffixes = set(json_dict["suffixes"])
 
     def parse_input(self, lines) -> list:
         """
@@ -85,35 +97,57 @@ class HmmModel:
 
         back_pointer = {}
 
-        # calculating viterbi path probability and back pointer for initial set of states (time t = 0)
+        # calculating viterbi path log probability and back pointer for initial set of states (time t = 0)
+        initial_suffix = obsv_sequence[0][-2:]
+        initial_suffix_2 = obsv_sequence[0][-3:]
         for state in self.training_states:
-            if (not ((state, obsv_sequence[0]) in self.emission_probs)):
-                if obsv_sequence[0] in self.training_obsvs:
-                    viterbi[(state, 0)] = 0
+            if (not ((state, obsv_sequence[0]) in self.emission_log_probs)):
+                if obsv_sequence[0] in self.training_obsvs or self.initial_probs[state] == float("-inf") or not(state in self.open_class_states):
+                    viterbi[(state, 0)] = float("-inf")
                 else:
-                    viterbi[(state, 0)] = self.initial_probs[state]
+                    if initial_suffix in self.suffixes:
+                        viterbi[(state, 0)] = self.initial_probs[state] + self.suffix_emission_log_probs[(state, initial_suffix)]
+                    elif initial_suffix_2 in self.suffixes:
+                        viterbi[(state, 0)] = self.initial_probs[state] + self.suffix_emission_log_probs[(state, initial_suffix_2)]
+                    else:
+                        viterbi[(state, 0)] = self.initial_probs[state]
             else:
-                viterbi[(state, 0)] = self.initial_probs[state] * self.emission_probs[(state, obsv_sequence[0])]
+                if self.emission_log_probs[(state, obsv_sequence[0])] == float("-inf") or self.initial_probs[state] == float("-inf"):
+                    viterbi[(state, 0)] = float("-inf")
+                else:
+                    viterbi[(state, 0)] = self.initial_probs[state] + self.emission_log_probs[(state, obsv_sequence[0])]
             back_pointer[(state, 0)] = None
 
-        # calculating viterbi path probability and back pointer for remaining states (time t = 1 to n-1)
+        # calculating viterbi path log probability and back pointer for remaining states (time t = 1 to n-1)
         for t in range(1, len(obsv_sequence)):
+
+            suffix = obsv_sequence[t][-2:]
+            suffix_2 = obsv_sequence[t][-3:]
             for state in self.training_states:
 
-                curr = 0
+                curr = float("-inf")
                 back = None
 
                 for prev_state in self.training_states:
                     alpha = 0
-                    if (not ((state, obsv_sequence[t]) in self.emission_probs)):
-                        # if word in observations then let this alpha be 0
-                        if obsv_sequence[t] in self.training_obsvs:
-                            alpha = 0
+                    if (not ((state, obsv_sequence[t]) in self.emission_log_probs)):
+                        if obsv_sequence[t] in self.training_obsvs or viterbi[(prev_state, t-1)] == float("-inf") or self.transition_log_probs[(prev_state, state)] == float("-inf")  or not(state in self.open_class_states):
+                            alpha = float("-inf")
                         else:
-                            alpha = viterbi[(prev_state, t-1)] * self.transition_probs[(prev_state, state)]
+                            if suffix in self.suffixes:
+                                alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)] + self.suffix_emission_log_probs[(state, suffix)]
+                            elif suffix_2 in self.suffixes:
+                                alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)] + self.suffix_emission_log_probs[(state, suffix_2)]
+                            else:
+                                alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)]
                     else:
-                        alpha = viterbi[(prev_state, t-1)] * self.transition_probs[(
-                            prev_state, state)] * self.emission_probs[(state, obsv_sequence[t])]
+                        if  viterbi[(prev_state, t-1)] == float("-inf") or self.emission_log_probs[(state, obsv_sequence[t])] == float("-inf") or self.transition_log_probs[(prev_state, state)] == float("-inf"):
+                            alpha = float("-inf")
+                        else:
+                            alpha = viterbi[(prev_state, t-1)] + self.transition_log_probs[(prev_state, state)] + self.emission_log_probs[(state, obsv_sequence[t])]
+
+                    if t == len(obsv_sequence)-1:
+                        alpha += self.final_probs[state]
 
                     if alpha >= curr:
                         curr = alpha
@@ -123,10 +157,10 @@ class HmmModel:
                 back_pointer[(state, t)] = back
 
         state_sequence = []
-        bestpathprob = 0
+        bestpathprob = float("-inf")
         bestpathstate = None
 
-        # finding best viterbi path probabilities of final time t = n-1
+        # finding best viterbi path log probabilities of final time t = n-1
         for state in self.training_states:
             if viterbi[(state, len(obsv_sequence)-1)] >= bestpathprob:
                 bestpathprob = viterbi[(state, len(obsv_sequence)-1)]
@@ -146,7 +180,7 @@ class HmmModel:
         """
             save tagging results to output file
         """
-        with open(file, 'w', encoding='utf8') as file:
+        with open(file, 'w', encoding='utf-8') as file:
             for tagged_line in tagged_lines:
                 output_line = []
                 # write as observation/state for each word
@@ -184,26 +218,40 @@ class HmmModel:
             find accuracy of tagging done by HMM by comparing against pre-tagged ground truth file
         """
         lines = []
-        with open(file, 'r', encoding='utf8', errors='ignore') as file:
+        with open(file, 'r', encoding='utf-8', errors='ignore') as file:
             for line in file:
                 lines.append(line)
 
         parsed_test_lines = self.parse_tagged_input(lines)
 
         total, count = 0, 0
+
+        seen, seen_correct_count, unseen, unseen_correct_count = 0, 0, 0, 0
         for i in range(len(parsed_test_lines)):
             for j in range(len(parsed_test_lines[i])):
 
-                _, pred_state = tagged_pred_lines[i][j]
+                pred_obsv, pred_state = tagged_pred_lines[i][j]
                 test_state, _ = parsed_test_lines[i][j]
+                
+                if pred_obsv in self.training_obsvs:
+                    seen += 1
+                else:
+                    unseen += 1
 
                 if (pred_state == test_state):
                     count += 1
+                    if pred_obsv in self.training_obsvs:
+                        seen_correct_count += 1
+                    else:
+                        unseen_correct_count += 1
 
                 total += 1
 
         print(f'Accuracy: {100*count/total}')
-
+        print(f'Total Seen: {seen}')
+        print(f'Seen Accuracy: {100*seen_correct_count/seen}')
+        print(f'Total Unseen: {unseen}')
+        print(f'Unseen Accuracy: {100*unseen_correct_count/unseen}')
 
 def main():
 
@@ -216,7 +264,7 @@ def main():
         input_file = "data/it_isdt_dev_raw.txt"
 
     lines = []
-    with open(input_file, 'r', encoding='utf8', errors='ignore') as file:
+    with open(input_file, 'r', encoding='utf-8', errors='ignore') as file:
         for line in file:
             lines.append(line)
 
@@ -226,7 +274,6 @@ def main():
     hm.write_output(output_file, tagged_lines)
 
     hm.compare_result('data/it_isdt_dev_tagged.txt', tagged_lines)
-
 
 if __name__ == "__main__":
     main()
