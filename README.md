@@ -20,7 +20,7 @@ Use the following steps for installation.
 
 1. Clone the repo
    ```sh
-   git clone https://github.com/dhananjaichand98/Hidden-Markov-POS-Tagger.git
+   git clone https://github.com/dhananjaichand98/Hidden-Markov-Model-POS-Tagger.git
    ```
 3. Install required Python packages
    ```sh
